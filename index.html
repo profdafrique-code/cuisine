@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cuisinière 2.0</title>
+<link rel="icon" href="assets/logo.png" type="image/png">
+
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, updateDoc, query, where, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+  // ═══════════════════════════════════════════════════
+  //  🔥 CONFIGURATION FIREBASE — À REMPLACER PAR LES VÔTRES
+  // ═══════════════════════════════════════════════════
+  const firebaseConfig = {
+    apiKey: "VOTRE_API_KEY",
+    authDomain: "VOTRE_PROJECT.firebaseapp.com",
+    projectId: "VOTRE_PROJECT_ID",
+    storageBucket: "VOTRE_PROJECT.appspot.com",
+    messagingSenderId: "VOTRE_SENDER_ID",
+    appId: "VOTRE_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  window.db      = getFirestore(app);
+  window.auth    = getAuth(app);
+  window.storage = getStorage(app);
+
+  // Exposer les fonctions Firestore dans window pour app.js
+  window.fbAuth = {
+    onAuthStateChanged, signInWithEmailAndPassword,
+    createUserWithEmailAndPassword, signOut, sendPasswordResetEmail
+  };
+  window.fbStore = {
+    doc, setDoc, getDoc, collection, getDocs, addDoc,
+    updateDoc, query, where, orderBy, serverTimestamp
+  };
+  window.fbStorage = { ref, uploadBytes, getDownloadURL };
+</script>
+
+<!-- CSS -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════
+     SPLASH SCREEN
+════════════════════════════════════════════════════════ -->
+<div id="splash-screen">
+  <div class="splash-inner">
+    <img src="assets/logo.png" alt="Cuisinière 2.0" class="splash-logo">
+    <div class="splash-tagline">Cuisine togolaise · Chef IA · Saveurs d'Afrique</div>
+    <div class="splash-loader">
+      <div class="splash-bar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     PHONE SHELL (émulateur mobile)
+════════════════════════════════════════════════════════ -->
+<div class="phone">
+  <div class="notch"></div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar" id="statusBar">
+    <span id="clock">00:00</span>
+    <div class="status-right">
+      <span>📶</span><span>🔋</span>
+    </div>
+  </div>
+
+  <div class="screens">
+
+    <!-- ══════════════ ACCUEIL ══════════════ -->
+    <div class="screen active" id="screen-accueil">
+      <div class="app-header">
+        <div class="header-logo">
+          <img src="assets/logo.png" alt="Logo" class="header-logo-img">
+          <div class="logo-text">Cuisinière 2.0</div>
+        </div>
+        <div class="header-actions">
+          <div class="header-btn crown" onclick="showScreen('premium')" title="Premium">👑</div>
+          <div class="header-btn" style="position:relative;">🔔<div class="notif-dot"></div></div>
+          <div class="header-btn" onclick="showScreen('profil')">👤</div>
+        </div>
+      </div>
+      <div class="scroll-area">
+        <div class="greeting-block">
+          <div class="greeting-text" id="greeting-text">Miawezon ! 🇹🇬</div>
+          <div class="greeting-sub">Prêt à cuisiner un plat de chez nous ?</div>
+        </div>
+
+        <div class="search-bar" onclick="showScreen('recherche')">
+          <span>🔍</span>
+          <span>Rechercher une recette, un ingrédient...</span>
+        </div>
+
+        <!-- CHEF IA BANNER -->
+        <div class="chef-ia" onclick="showScreen('ia')">
+          <div class="chef-avatar">👩‍🍳</div>
+          <div class="chef-ia-text">
+            <div class="chef-ia-title">Chef IA</div>
+            <div class="chef-ia-sub">Besoin d'aide pour remplacer un ingrédient ? Demandez-moi !</div>
+            <div class="chef-ia-counter" id="ia-counter-home">🔢 5/5 questions aujourd'hui</div>
+          </div>
+        </div>
+
+        <!-- CATÉGORIES -->
+        <div class="section-head">
+          <div class="section-title-text">Catégories</div>
+          <div class="see-all">Voir tout →</div>
+        </div>
+        <div class="cats-scroll">
+          <div class="cat-item active" onclick="filterCategory('Plats en sauce', this)">
+            <span class="cat-icon">🍲</span>
+            <div class="cat-name">Plats en sauce</div>
+            <div class="cat-count" id="count-sauce">— recettes</div>
+          </div>
+          <div class="cat-item" onclick="filterCategory('Grillades', this)">
+            <span class="cat-icon">🐟</span>
+            <div class="cat-name">Grillades</div>
+            <div class="cat-count" id="count-grillade">— recettes</div>
+          </div>
+          <div class="cat-item" onclick="filterCategory('Pâtes & Fufu', this)">
+            <span class="cat-icon">🍚</span>
+            <div class="cat-name">Pâtes & Fufu</div>
+            <div class="cat-count" id="count-fufu">— recettes</div>
+          </div>
+          <div class="cat-item" onclick="filterCategory('Desserts', this)">
+            <span class="cat-icon">🍌</span>
+            <div class="cat-name">Desserts</div>
+            <div class="cat-count" id="count-dessert">— recettes</div>
+          </div>
+        </div>
+
+        <!-- TENDANCES -->
+        <div class="section-head" style="margin-top:16px;">
+          <div class="section-title-text">🔥 Les plus cuisinées</div>
+          <div class="see-all">Voir tout →</div>
+        </div>
+        <div class="tendances-scroll" id="tendances-container">
+          <!-- Injecté dynamiquement par app.js -->
+          <div class="tendance-card skeleton-card"></div>
+          <div class="tendance-card skeleton-card"></div>
+          <div class="tendance-card skeleton-card"></div>
+        </div>
+
+        <!-- RECETTES À L'HONNEUR -->
+        <div class="section-head" style="margin-top:16px;">
+          <div class="section-title-text">📖 Recettes à l'honneur</div>
+        </div>
+        <div id="recettes-honneur-container">
+          <!-- Injecté dynamiquement par app.js -->
+          <div class="recette-honneur skeleton-card" style="height:320px;margin:0 20px 16px;"></div>
+        </div>
+
+        <!-- BLOC COMMANDER -->
+        <div class="commander-bloc">
+          <div class="commander-icon">🛵</div>
+          <div class="commander-title">Envie d'un plat préparé ?</div>
+          <div class="commander-sub">Nos partenaires à Lomé livrent vos plats préférés directement chez vous.</div>
+          <button class="btn-commander" onclick="showScreen('commander')">Voir les partenaires →</button>
+        </div>
+
+      </div><!-- /scroll-area -->
+      <div class="bottom-nav">
+        <div class="nav-item active" onclick="showScreen('accueil')"><div class="nav-icon">🏠</div><div class="nav-label">Recettes</div></div>
+        <div class="nav-item" onclick="showScreen('tutoriels')"><div class="nav-icon">🎬</div><div class="nav-label">Tutoriels</div></div>
+        <div class="nav-item" onclick="showScreen('courses')"><div class="nav-icon">🛒</div><div class="nav-label">Courses</div></div>
+        <div class="nav-item" onclick="showScreen('commander')"><div class="nav-icon">🛵</div><div class="nav-label">Commander</div></div>
+        <div class="nav-item" onclick="showScreen('profil')"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ FICHE RECETTE (dynamique) ══════════════ -->
+    <div class="screen" id="screen-fiche-recette">
+      <div class="fiche-header" id="fiche-hero-img" style="font-size:80px;">🍽️
+        <div class="fiche-back" onclick="showScreen('accueil')">←</div>
+        <div class="fiche-fav" id="fiche-fav-btn" onclick="toggleFavori()">🤍</div>
+        <div class="fiche-badges">
+          <span class="fiche-badge badge-green" id="fiche-diff-badge">⭐ —</span>
+          <span class="fiche-badge badge-dark" id="fiche-time-badge">⏱ —</span>
+        </div>
+      </div>
+      <div class="scroll-area" style="padding-bottom:90px;">
+        <div class="fiche-body">
+          <div class="fiche-title" id="fiche-title">—</div>
+          <div class="fiche-desc" id="fiche-desc">—</div>
+          <div class="fiche-meta-row">
+            <div class="fiche-meta-item"><div class="fiche-meta-val" id="fiche-meta-temps">—</div><div class="fiche-meta-key">Durée</div></div>
+            <div class="fiche-meta-item"><div class="fiche-meta-val" id="fiche-meta-diff">—</div><div class="fiche-meta-key">Difficulté</div></div>
+            <div class="fiche-meta-item"><div class="fiche-meta-val" id="fiche-meta-cal">~—</div><div class="fiche-meta-key">Calories</div></div>
+          </div>
+          <div class="portions-row">
+            <div class="portions-label">👥 Nombre de personnes</div>
+            <div class="portions-ctrl">
+              <button class="portions-btn" onclick="changePortion(-1,'fiche')">−</button>
+              <div class="portions-num" id="portion-fiche">4</div>
+              <button class="portions-btn" onclick="changePortion(1,'fiche')">+</button>
+            </div>
+          </div>
+          <div class="ingredients-label">Ingrédients</div>
+          <div class="ingredients-tags" id="fiche-ingredients" style="margin-bottom:16px;">
+            <!-- injecté dynamiquement -->
+          </div>
+          <div class="etapes-section">
+            <div class="ingredients-label">Étapes de préparation</div>
+            <div id="fiche-etapes"><!-- injecté dynamiquement --></div>
+          </div>
+          <div class="btn-actions" style="margin-top:12px;">
+            <button class="btn-primary" style="flex:1;" onclick="apprendre()">👩‍🍳 Apprendre à cuisiner</button>
+          </div>
+          <div class="btn-actions" style="margin-top:8px;">
+            <button class="btn-secondary" style="flex:1;" onclick="ajouterAuxCourses()">🛒 Ajouter aux courses</button>
+            <button class="btn-icon" onclick="partagerWhatsApp()">📲</button>
+          </div>
+          <!-- COMMENTAIRES -->
+          <div style="margin-top:20px;" id="commentaires-section">
+            <div class="ingredients-label">Commentaires & avis</div>
+            <div id="commentaires-list"><!-- injecté --></div>
+            <div id="commentaire-form" style="display:none;margin-top:10px;">
+              <textarea class="form-input form-textarea" id="new-comment" placeholder="Votre commentaire..."></textarea>
+              <div style="display:flex;gap:6px;margin-top:8px;">
+                <select class="form-input form-select" id="new-note" style="width:120px;">
+                  <option value="5">⭐⭐⭐⭐⭐</option>
+                  <option value="4">⭐⭐⭐⭐</option>
+                  <option value="3">⭐⭐⭐</option>
+                  <option value="2">⭐⭐</option>
+                  <option value="1">⭐</option>
+                </select>
+                <button class="btn-primary" style="flex:1;padding:10px;" onclick="publierCommentaire()">Publier</button>
+              </div>
+            </div>
+            <button class="btn-secondary" style="margin-top:8px;" onclick="toggleCommentaireForm()">✍️ Laisser un avis</button>
+          </div>
+        </div>
+        <!-- BLOC COMMANDER en bas de fiche -->
+        <div class="commander-bloc" style="margin:0 20px 20px;">
+          <div class="commander-icon">🛵</div>
+          <div class="commander-title">Commander ce plat</div>
+          <div class="commander-sub">Nos partenaires préparent ce plat pour vous !</div>
+          <button class="btn-commander" onclick="showScreen('commander')">Voir les partenaires →</button>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item active" onclick="showScreen('accueil')"><div class="nav-icon">🏠</div><div class="nav-label">Recettes</div></div>
+        <div class="nav-item" onclick="showScreen('tutoriels')"><div class="nav-icon">🎬</div><div class="nav-label">Tutoriels</div></div>
+        <div class="nav-item" onclick="showScreen('courses')"><div class="nav-icon">🛒</div><div class="nav-label">Courses</div></div>
+        <div class="nav-item" onclick="showScreen('commander')"><div class="nav-icon">🛵</div><div class="nav-label">Commander</div></div>
+        <div class="nav-item" onclick="showScreen('profil')"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ CHEF IA ══════════════ -->
+    <div class="screen" id="screen-ia">
+      <div class="ia-header">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <div style="cursor:pointer;color:white;font-size:20px;" onclick="showScreen('accueil')">←</div>
+          <div class="ia-header-title">Chef IA 🤖</div>
+        </div>
+        <div class="ia-header-sub">Votre assistant culinaire personnel — disponible 24h/24</div>
+        <div class="ia-counter-bar">
+          <div class="ia-counter-text" id="ia-counter-text">5 / 5 questions aujourd'hui</div>
+          <div class="ia-counter-dots" id="ia-counter-dots">
+            <div class="ia-dot"></div>
+            <div class="ia-dot"></div>
+            <div class="ia-dot"></div>
+            <div class="ia-dot"></div>
+            <div class="ia-dot"></div>
+          </div>
+        </div>
+      </div>
+      <div class="scroll-area" style="padding-bottom:80px;" id="ia-scroll-area">
+        <div class="ia-suggestions">
+          <div class="ia-suggestions-label">💡 Questions suggérées</div>
+          <div class="ia-suggestion-pills">
+            <div class="ia-pill" onclick="sendSuggestion(this)"><span class="ia-pill-icon">🌶️</span> Comment remplacer le piment dans l'Ayimolou ?</div>
+            <div class="ia-pill" onclick="sendSuggestion(this)"><span class="ia-pill-icon">🥦</span> Version végétarienne du Fufu ?</div>
+            <div class="ia-pill" onclick="sendSuggestion(this)"><span class="ia-pill-icon">🔢</span> Combien de calories dans le Djinkoumé ?</div>
+          </div>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+          <div class="msg-ia">
+            <div class="msg-ia-avatar">👩‍🍳</div>
+            <div class="msg-bubble-ia">Miawezon ! Je suis votre Chef IA. Posez-moi n'importe quelle question sur la cuisine togolaise et africaine ! 🇹🇬</div>
+          </div>
+        </div>
+      </div>
+      <div class="chat-input-row" style="position:sticky;bottom:0;">
+        <input class="chat-input" id="chat-input" placeholder="Posez votre question au Chef IA...">
+        <button class="chat-send" onclick="sendMessage()">➤</button>
+      </div>
+    </div>
+
+    <!-- ══════════════ RECHERCHE ══════════════ -->
+    <div class="screen" id="screen-recherche">
+      <div class="app-header">
+        <div onclick="showScreen('accueil')" style="cursor:pointer;font-size:20px;padding-right:10px;">←</div>
+        <input class="chat-input" id="search-input" placeholder="Recette, ingrédient..." style="flex:1;margin:0;" oninput="rechercherRecettes(this.value)">
+      </div>
+      <div class="scroll-area">
+        <div id="search-results" style="padding:12px 20px;">
+          <div style="font-size:13px;color:var(--gris);">Tapez pour rechercher...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ TUTORIELS ══════════════ -->
+    <div class="screen" id="screen-tutoriels">
+      <div class="app-header">
+        <div class="header-logo">
+          <img src="assets/logo.png" alt="Logo" class="header-logo-img">
+          <div class="logo-text">Tutoriels</div>
+        </div>
+        <div class="header-actions">
+          <div class="header-btn crown" onclick="showScreen('premium')">👑</div>
+        </div>
+      </div>
+      <div class="scroll-area">
+        <div class="section-head" style="padding-top:14px;">
+          <div class="section-title-text">🎬 Apprendre à cuisiner</div>
+        </div>
+        <div class="tuto-card">
+          <div class="tuto-img bg-ayimolou" style="color:white;">🍚</div>
+          <div class="tuto-body">
+            <div class="tuto-name">Maîtriser l'Ayimolou — les secrets</div>
+            <div class="tuto-meta"><span class="tuto-tag">Gratuit</span><span class="tuto-duration">⏱ 12 min</span></div>
+          </div>
+        </div>
+        <div class="tuto-card" onclick="checkPremiumAccess()">
+          <div class="tuto-img bg-fufu" style="color:white;">🥣
+            <div class="tuto-lock">🔒</div>
+          </div>
+          <div class="tuto-body">
+            <div class="tuto-name">Piler le Fufu parfait</div>
+            <div class="tuto-meta"><span class="tuto-tag premium">👑 Premium</span><span class="tuto-duration">⏱ 18 min</span></div>
+          </div>
+        </div>
+        <div class="tuto-card">
+          <div class="tuto-img bg-djinkoume" style="color:white;">🌽</div>
+          <div class="tuto-body">
+            <div class="tuto-name">Djinkoumé sans grumeaux — technique pro</div>
+            <div class="tuto-meta"><span class="tuto-tag">Gratuit</span><span class="tuto-duration">⏱ 15 min</span></div>
+          </div>
+        </div>
+        <div class="tuto-card" onclick="checkPremiumAccess()">
+          <div class="tuto-img bg-grillade" style="color:white;">🐟
+            <div class="tuto-lock">🔒</div>
+          </div>
+          <div class="tuto-body">
+            <div class="tuto-name">Poisson braisé — marinade secrète</div>
+            <div class="tuto-meta"><span class="tuto-tag premium">👑 Premium</span><span class="tuto-duration">⏱ 20 min</span></div>
+          </div>
+        </div>
+        <div style="margin:0 20px 20px;">
+          <button class="btn-primary" onclick="showScreen('premium')">👑 Débloquer tous les tutoriels Premium</button>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item" onclick="showScreen('accueil')"><div class="nav-icon">🏠</div><div class="nav-label">Recettes</div></div>
+        <div class="nav-item active"><div class="nav-icon">🎬</div><div class="nav-label">Tutoriels</div></div>
+        <div class="nav-item" onclick="showScreen('courses')"><div class="nav-icon">🛒</div><div class="nav-label">Courses</div></div>
+        <div class="nav-item" onclick="showScreen('commander')"><div class="nav-icon">🛵</div><div class="nav-label">Commander</div></div>
+        <div class="nav-item" onclick="showScreen('profil')"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ COURSES ══════════════ -->
+    <div class="screen" id="screen-courses">
+      <div class="courses-header">
+        <div class="courses-title">🛒 Ma liste de courses</div>
+        <div class="courses-sub">Générée depuis vos recettes</div>
+      </div>
+      <div class="scroll-area">
+        <div class="courses-add" onclick="addManualCourse()">
+          <span>➕</span>
+          <span>Ajouter un article manuellement</span>
+        </div>
+        <div id="courses-dynamic-container">
+          <!-- injecté dynamiquement -->
+        </div>
+        <div class="courses-share" onclick="partagerCoursesWhatsApp()">
+          <span style="font-size:22px;">📲</span>
+          <div class="courses-share-text">Partager la liste sur WhatsApp</div>
+          <span style="color:var(--vert);">→</span>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item" onclick="showScreen('accueil')"><div class="nav-icon">🏠</div><div class="nav-label">Recettes</div></div>
+        <div class="nav-item" onclick="showScreen('tutoriels')"><div class="nav-icon">🎬</div><div class="nav-label">Tutoriels</div></div>
+        <div class="nav-item active"><div class="nav-icon">🛒</div><div class="nav-label">Courses</div></div>
+        <div class="nav-item" onclick="showScreen('commander')"><div class="nav-icon">🛵</div><div class="nav-label">Commander</div></div>
+        <div class="nav-item" onclick="showScreen('profil')"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ COMMANDER ══════════════ -->
+    <div class="screen" id="screen-commander">
+      <div class="app-header">
+        <div class="header-logo">
+          <div class="logo-circle" style="font-size:18px;">🛵</div>
+          <div class="logo-text">Commander</div>
+        </div>
+      </div>
+      <div class="scroll-area">
+        <div style="padding:16px 20px 8px;">
+          <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;margin-bottom:4px;">Nos partenaires à Lomé 📍</div>
+          <div style="font-size:13px;color:var(--gris);">Plats préparés, livrés chez vous</div>
+        </div>
+        <div style="margin:0 20px 14px;background:white;border-radius:18px;overflow:hidden;border:1px solid #e8e4de;">
+          <div style="background:var(--vert);padding:16px;display:flex;align-items:center;gap:12px;">
+            <div style="font-size:32px;">🍽️</div>
+            <div><div style="color:white;font-weight:700;font-size:15px;">Chez Mama Akua</div><div style="color:rgba(255,255,255,0.75);font-size:12px;">Tokoin · Livraison 30-45 min</div></div>
+            <div style="margin-left:auto;background:var(--or);color:var(--texte);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;">⭐ 4.9</div>
+          </div>
+          <div style="padding:14px 16px;">
+            <div style="font-size:12px;color:var(--gris);margin-bottom:10px;">Spécialités : Ayimolou, Fufu, Tô</div>
+            <button class="btn-primary" style="padding:11px;">Commander ici →</button>
+          </div>
+        </div>
+        <div style="margin:0 20px 14px;background:white;border-radius:18px;overflow:hidden;border:1px solid #e8e4de;">
+          <div style="background:#2d6a4f;padding:16px;display:flex;align-items:center;gap:12px;">
+            <div style="font-size:32px;">🥘</div>
+            <div><div style="color:white;font-weight:700;font-size:15px;">Resto Togo Saveurs</div><div style="color:rgba(255,255,255,0.75);font-size:12px;">Bè · Livraison 40-60 min</div></div>
+            <div style="margin-left:auto;background:var(--or);color:var(--texte);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700;">⭐ 4.7</div>
+          </div>
+          <div style="padding:14px 16px;">
+            <div style="font-size:12px;color:var(--gris);margin-bottom:10px;">Spécialités : Djinkoumé, Grillades, Kedjenu</div>
+            <button class="btn-primary" style="padding:11px;">Commander ici →</button>
+          </div>
+        </div>
+        <div style="margin:0 20px 20px;background:#fffbeb;border-radius:18px;padding:16px;border:1.5px dashed #fde68a;text-align:center;">
+          <div style="font-size:20px;margin-bottom:6px;">🤝</div>
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px;">Vous êtes restaurateur ?</div>
+          <div style="font-size:12px;color:var(--gris);margin-bottom:12px;">Rejoignez notre réseau de partenaires locaux</div>
+          <button class="btn-commander">Devenir partenaire</button>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item" onclick="showScreen('accueil')"><div class="nav-icon">🏠</div><div class="nav-label">Recettes</div></div>
+        <div class="nav-item" onclick="showScreen('tutoriels')"><div class="nav-icon">🎬</div><div class="nav-label">Tutoriels</div></div>
+        <div class="nav-item" onclick="showScreen('courses')"><div class="nav-icon">🛒</div><div class="nav-label">Courses</div></div>
+        <div class="nav-item active"><div class="nav-icon">🛵</div><div class="nav-label">Commander</div></div>
+        <div class="nav-item" onclick="showScreen('profil')"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ PROFIL ══════════════ -->
+    <div class="screen" id="screen-profil">
+      <div class="profil-hero">
+        <div class="profil-avatar" id="profil-avatar">👤</div>
+        <div class="profil-name" id="profil-name">Chargement...</div>
+        <div class="profil-badge" id="profil-badge">🌍 GRATUIT</div>
+        <div class="profil-expiry" id="profil-expiry"></div>
+      </div>
+      <div class="scroll-area" style="padding-bottom:90px;padding-top:14px;">
+        <div class="profil-stats">
+          <div class="profil-stat"><div class="profil-stat-num" id="stat-favoris">0</div><div class="profil-stat-label">❤️ Favoris</div></div>
+          <div class="profil-stat"><div class="profil-stat-num" id="stat-recettes">0</div><div class="profil-stat-label">📝 Recettes</div></div>
+          <div class="profil-stat"><div class="profil-stat-num" id="stat-points">0</div><div class="profil-stat-label">⭐ Points</div></div>
+        </div>
+        <div class="profil-level" style="margin-top:14px;">
+          <div class="level-row">
+            <div class="level-name" id="level-name">🏆 Apprenti</div>
+            <div class="level-pts" id="level-pts">0 / 30 pts</div>
+          </div>
+          <div class="level-bar"><div class="level-fill" id="level-fill" style="width:0%"></div></div>
+          <div style="font-size:11px;color:var(--gris);margin-top:6px;" id="level-msg">Continuez à cuisiner pour progresser !</div>
+        </div>
+        <div class="profil-menu">
+          <div class="menu-section-title">Mon espace</div>
+          <div class="menu-item"><div class="menu-icon">❤️</div><div class="menu-text"><div class="menu-label">Mes recettes favorites</div><div class="menu-sub" id="menu-favoris-sub">0 recettes sauvegardées</div></div><div class="menu-arrow">›</div></div>
+          <div class="menu-item"><div class="menu-icon">📝</div><div class="menu-text"><div class="menu-label">Mes recettes soumises</div><div class="menu-sub">Bientôt disponible</div></div><div class="menu-arrow">›</div></div>
+          <div class="menu-item" onclick="showScreen('ia')"><div class="menu-icon">🤖</div><div class="menu-text"><div class="menu-label">Chef IA</div><div class="menu-sub" id="menu-ia-sub">5 questions/jour</div></div><div class="menu-arrow">›</div></div>
+          <div class="menu-section-title">Abonnement</div>
+          <div class="menu-item" onclick="showScreen('premium')"><div class="menu-icon">👑</div><div class="menu-text"><div class="menu-label">Mon abonnement Premium</div><div class="menu-sub" id="menu-premium-sub">Passer à Premium</div></div><div class="menu-arrow">›</div></div>
+          <div class="menu-section-title" id="admin-section-title" style="display:none;">Administration</div>
+          <div class="menu-item" id="admin-menu-btn" onclick="showScreen('admin')" style="background:#f0fdf4;border-color:#86efac;display:none;">
+            <div class="menu-icon">🛡️</div>
+            <div class="menu-text"><div class="menu-label" style="color:var(--vert);">Tableau de bord Admin</div><div class="menu-sub">Gérer recettes, utilisateurs, abonnements</div></div>
+            <div class="menu-arrow" style="color:var(--vert);">›</div>
+          </div>
+          <div class="menu-section-title">Compte</div>
+          <div class="menu-item"><div class="menu-icon">🔐</div><div class="menu-text"><div class="menu-label">Sécurité du compte</div><div class="menu-sub">Mot de passe, confidentialité</div></div><div class="menu-arrow">›</div></div>
+          <div class="menu-item" onclick="deconnexion()" style="border-color:#fee2e2;"><div class="menu-icon">🚪</div><div class="menu-text"><div class="menu-label" style="color:var(--rouge);">Se déconnecter</div></div><div class="menu-arrow" style="color:var(--rouge);">›</div></div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item" onclick="showScreen('accueil')"><div class="nav-icon">🏠</div><div class="nav-label">Recettes</div></div>
+        <div class="nav-item" onclick="showScreen('tutoriels')"><div class="nav-icon">🎬</div><div class="nav-label">Tutoriels</div></div>
+        <div class="nav-item" onclick="showScreen('courses')"><div class="nav-icon">🛒</div><div class="nav-label">Courses</div></div>
+        <div class="nav-item" onclick="showScreen('commander')"><div class="nav-icon">🛵</div><div class="nav-label">Commander</div></div>
+        <div class="nav-item active"><div class="nav-icon">👤</div><div class="nav-label">Profil</div></div>
+      </div>
+    </div>
+
+    <!-- ══════════════ PREMIUM ══════════════ -->
+    <div class="screen" id="screen-premium">
+      <div class="premium-hero">
+        <div style="cursor:pointer;color:white;font-size:20px;margin-bottom:14px;" onclick="showScreen('accueil')">← Retour</div>
+        <div class="premium-crown">👑</div>
+        <div class="premium-hero-title">Passez Premium</div>
+        <div class="premium-hero-sub">Accédez à toutes les recettes, tutoriels et au Chef IA sans limite</div>
+        <div class="premium-price">1 200 FCFA / 6 mois</div>
+      </div>
+      <div class="scroll-area" style="padding-bottom:30px;">
+        <div class="premium-compare">
+          <div class="compare-title">Gratuit vs Premium</div>
+          <div class="compare-table">
+            <div class="compare-row header">
+              <div class="compare-feat">Fonctionnalité</div>
+              <div class="compare-free">Gratuit</div>
+              <div class="compare-pro">👑 Pro</div>
+            </div>
+            <div class="compare-row"><div class="compare-feat">Recettes de base</div><div class="compare-free">✅</div><div class="compare-pro">✅</div></div>
+            <div class="compare-row"><div class="compare-feat">Toutes les recettes</div><div class="compare-free">❌</div><div class="compare-pro">✅</div></div>
+            <div class="compare-row"><div class="compare-feat">Chef IA</div><div class="compare-free" style="font-size:11px;">5/jour</div><div class="compare-pro">∞</div></div>
+            <div class="compare-row"><div class="compare-feat">Tutoriels avancés</div><div class="compare-free">❌</div><div class="compare-pro">✅</div></div>
+            <div class="compare-row"><div class="compare-feat">Sans publicité</div><div class="compare-free">❌</div><div class="compare-pro">✅</div></div>
+            <div class="compare-row"><div class="compare-feat">Planificateur repas</div><div class="compare-free">❌</div><div class="compare-pro" style="font-size:10px;">Bientôt</div></div>
+          </div>
+        </div>
+        <div class="premium-cta-block">
+          <button class="btn-primary" style="background:linear-gradient(135deg,var(--or),#d4920a);color:#1a1a1e;font-size:16px;padding:16px;" onclick="lancerPaiement()">
+            👑 S'abonner pour 1 200 FCFA
+          </button>
+          <div class="premium-cta-note">Paiement sécurisé · Accès immédiat · Sans engagement renouvelable</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ AUTH (Connexion / Inscription) ══════════════ -->
+    <div class="screen" id="screen-auth">
+      <div style="display:flex;flex-direction:column;justify-content:center;min-height:100%;padding:40px 28px;background:var(--bg);">
+        <div style="text-align:center;margin-bottom:32px;">
+          <img src="assets/logo.png" alt="Logo" style="width:90px;margin-bottom:12px;">
+          <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:var(--vert);">Cuisinière 2.0</div>
+          <div style="font-size:13px;color:var(--gris);margin-top:4px;">Cuisine togolaise authentique</div>
+        </div>
+        <div id="auth-tabs" style="display:flex;gap:0;background:#e8e4de;border-radius:12px;padding:4px;margin-bottom:24px;">
+          <div id="tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Connexion</div>
+          <div id="tab-signup" class="auth-tab" onclick="switchAuthTab('signup')">Inscription</div>
+        </div>
+        <div id="auth-form-login">
+          <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" id="login-email" placeholder="votremail@exemple.com"></div>
+          <div class="form-group"><label class="form-label">Mot de passe</label><input class="form-input" type="password" id="login-password" placeholder="••••••••"></div>
+          <button class="btn-primary" style="margin-top:8px;" onclick="connecter()">Se connecter</button>
+          <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--vert);cursor:pointer;" onclick="resetPassword()">Mot de passe oublié ?</div>
+        </div>
+        <div id="auth-form-signup" style="display:none;">
+          <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" id="signup-email" placeholder="votremail@exemple.com"></div>
+          <div class="form-group"><label class="form-label">Mot de passe</label><input class="form-input" type="password" id="signup-password" placeholder="Min. 6 caractères"></div>
+          <button class="btn-primary" style="margin-top:8px;" onclick="inscrire()">Créer mon compte</button>
+        </div>
+        <div id="auth-error" style="display:none;background:#fee2e2;color:#991b1b;border-radius:10px;padding:10px 14px;margin-top:12px;font-size:13px;"></div>
+        <button onclick="continuerSansConnexion()" style="width:100%;background:transparent;border:none;color:var(--gris);font-size:13px;padding:14px;cursor:pointer;font-family:'Outfit',sans-serif;margin-top:8px;">
+          Continuer sans connexion →
+        </button>
+      </div>
+    </div>
+
+    <!-- ══════════════ ADMIN DASHBOARD ══════════════ -->
+    <div class="screen" id="screen-admin">
+      <div style="background:linear-gradient(135deg,#0a3d22,var(--vert));padding:52px 20px 20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="cursor:pointer;color:rgba(255,255,255,0.7);font-size:13px;" onclick="showScreen('profil')">← Retour</div>
+          <div style="background:rgba(255,255,255,0.15);border-radius:20px;padding:4px 12px;font-size:11px;color:white;font-weight:700;">🛡️ ADMIN</div>
+        </div>
+        <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:white;margin-bottom:4px;">Tableau de bord</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.7);">Gestion de l'application Cuisinière 2.0</div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <div style="flex:1;background:rgba(255,255,255,0.1);border-radius:14px;padding:12px;text-align:center;">
+            <div style="font-size:22px;font-weight:800;color:var(--or);" id="admin-stat-recettes">—</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px;">Recettes</div>
+          </div>
+          <div style="flex:1;background:rgba(255,255,255,0.1);border-radius:14px;padding:12px;text-align:center;">
+            <div style="font-size:22px;font-weight:800;color:var(--or);" id="admin-stat-pending">—</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px;">En attente</div>
+          </div>
+          <div style="flex:1;background:rgba(255,255,255,0.1);border-radius:14px;padding:12px;text-align:center;">
+            <div style="font-size:22px;font-weight:800;color:var(--or);" id="admin-stat-users">—</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.7);margin-top:2px;">Utilisateurs</div>
+          </div>
+        </div>
+      </div>
+      <div class="scroll-area" style="padding-bottom:20px;">
+        <div style="padding:16px 20px 8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--gris);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">Actions rapides</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+            <div onclick="showScreen('ajouter-recette')" style="background:var(--vert);border-radius:16px;padding:16px;cursor:pointer;text-align:center;">
+              <div style="font-size:28px;margin-bottom:6px;">➕</div>
+              <div style="color:white;font-weight:700;font-size:13px;">Ajouter recette</div>
+            </div>
+            <div onclick="chargerRecettesEnAttente()" style="background:white;border-radius:16px;padding:16px;cursor:pointer;text-align:center;border:1px solid #e8e4de;">
+              <div style="font-size:28px;margin-bottom:6px;">✅</div>
+              <div style="font-weight:700;font-size:13px;color:var(--texte);">Valider recettes</div>
+              <div style="font-size:10px;color:var(--rouge);margin-top:2px;font-weight:600;" id="admin-pending-label">— en attente</div>
+            </div>
+            <div style="background:white;border-radius:16px;padding:16px;cursor:pointer;text-align:center;border:1px solid #e8e4de;">
+              <div style="font-size:28px;margin-bottom:6px;">👥</div>
+              <div style="font-weight:700;font-size:13px;color:var(--texte);">Utilisateurs</div>
+            </div>
+            <div style="background:white;border-radius:16px;padding:16px;cursor:pointer;text-align:center;border:1px solid #e8e4de;">
+              <div style="font-size:28px;margin-bottom:6px;">💳</div>
+              <div style="font-weight:700;font-size:13px;color:var(--texte);">Abonnements</div>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:var(--gris);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">Recettes à valider</div>
+          <div id="admin-pending-list">
+            <div style="color:var(--gris);font-size:13px;padding:12px;">Chargement...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ FORMULAIRE AJOUTER RECETTE (ADMIN) ══════════════ -->
+    <div class="screen" id="screen-ajouter-recette">
+      <div style="background:white;padding:52px 20px 14px;border-bottom:1px solid #f0ede6;position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div onclick="showScreen('admin')" style="width:34px;height:34px;background:var(--gris2);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;">←</div>
+          <div>
+            <div style="font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--texte);">Nouvelle recette</div>
+            <div style="font-size:11px;color:var(--gris);">Formulaire administrateur</div>
+          </div>
+        </div>
+        <div style="background:var(--vert3);color:var(--vert);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;">🛡️ ADMIN</div>
+      </div>
+      <div class="scroll-area" style="padding-bottom:30px;">
+
+        <!-- SECTION 1 : INFOS DE BASE -->
+        <div style="padding:20px 20px 0;">
+          <div class="form-section-title">📝 Informations de base</div>
+          <div class="form-group"><label class="form-label">Nom de la recette <span class="required">*</span></label><input class="form-input" type="text" placeholder="Ex: Ayimolou Traditionnel" id="nom-recette" oninput="updatePreview()"></div>
+          <div class="form-group"><label class="form-label">Description courte <span class="required">*</span></label><textarea class="form-input form-textarea" placeholder="Décrivez le plat en 1 à 2 phrases..." id="desc-recette" oninput="updatePreview()"></textarea></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group"><label class="form-label">Catégorie <span class="required">*</span></label><select class="form-input form-select" id="cat-recette"><option value="">Choisir...</option><option>Plats en sauce</option><option>Grillades</option><option>Pâtes & Fufu</option><option>Desserts</option><option>Petit-déjeuner</option><option>Boissons</option></select></div>
+            <div class="form-group"><label class="form-label">Difficulté <span class="required">*</span></label><select class="form-input form-select" id="diff-recette"><option value="">Choisir...</option><option>⭐ Facile</option><option>⭐⭐ Moyen</option><option>⭐⭐⭐ Difficile</option></select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group"><label class="form-label">⏱ Durée</label><input class="form-input" type="text" placeholder="Ex: 45 min" id="temps-recette"></div>
+            <div class="form-group"><label class="form-label">👥 Personnes</label>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                <button class="portions-btn" onclick="changeFormPortion(-1)" style="flex-shrink:0;">−</button>
+                <div id="form-portions" style="font-size:18px;font-weight:800;min-width:28px;text-align:center;color:var(--texte);">4</div>
+                <button class="portions-btn" onclick="changeFormPortion(1)" style="flex-shrink:0;">+</button>
+              </div>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label">Accès</label>
+            <div style="display:flex;gap:10px;margin-top:6px;">
+              <div class="access-option active" id="access-gratuit" onclick="setAccess('gratuit')"><span style="font-size:18px;">🌍</span><div style="font-size:12px;font-weight:700;margin-top:4px;">Gratuit</div><div style="font-size:10px;color:var(--gris);">Tout le monde</div></div>
+              <div class="access-option" id="access-premium" onclick="setAccess('premium')"><span style="font-size:18px;">👑</span><div style="font-size:12px;font-weight:700;margin-top:4px;">Premium</div><div style="font-size:10px;color:var(--gris);">Abonnés seulement</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 2 : IMAGES -->
+        <div style="padding:20px 20px 0;">
+          <div class="form-section-title">🖼️ Image de la recette</div>
+          <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+            <div id="uploadPlaceholder"><div style="font-size:40px;margin-bottom:8px;">📷</div><div style="font-size:14px;font-weight:600;color:var(--texte);margin-bottom:4px;">Appuyer pour ajouter une photo</div><div style="font-size:12px;color:var(--gris);">JPG, PNG · Max 5 Mo</div></div>
+            <div id="uploadPreview" style="display:none;width:100%;height:100%;position:relative;"><img id="previewImg" style="width:100%;height:100%;object-fit:cover;border-radius:14px;" alt=""><div style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);color:white;border-radius:20px;padding:4px 10px;font-size:11px;font-weight:600;">✏️ Changer</div><div id="imgEmoji" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:64px;background:linear-gradient(135deg,#8B4513,#5C2E00);border-radius:14px;display:none;"></div></div>
+            <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+          </div>
+          <div style="margin-top:12px;"><div class="form-label" style="margin-bottom:8px;">Ou choisir une illustration rapide</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🍲','bg-ayimolou')">🍲</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🍚','bg-ayimolou')">🍚</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🥣','bg-fufu')">🥣</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🌽','bg-djinkoume')">🌽</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🐟','bg-grillade')">🐟</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🥩','bg-grillade')">🥩</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🍌','bg-dessert')">🍌</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🥜','bg-fufu')">🥜</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🍗','bg-djinkoume')">🍗</div>
+              <div class="emoji-img-btn" onclick="selectEmojiImg('🥘','bg-kedjenu')">🥘</div>
+            </div>
+          </div>
+          <div style="margin-top:16px;"><div class="form-label" style="margin-bottom:8px;">Aperçu de la carte recette</div>
+            <div id="preview-card" style="background:white;border-radius:16px;overflow:hidden;border:1px solid #e8e4de;">
+              <div id="preview-img-area" class="bg-ayimolou" style="height:110px;display:flex;align-items:center;justify-content:center;font-size:50px;position:relative;">🍽️
+                <div style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.55);color:white;font-size:9px;padding:2px 7px;border-radius:20px;font-weight:600;" id="preview-time">⏱ —</div>
+                <div style="position:absolute;top:8px;left:8px;background:var(--vert);color:white;font-size:9px;padding:2px 7px;border-radius:20px;font-weight:700;" id="preview-diff">⭐ —</div>
+              </div>
+              <div style="padding:10px 12px 12px;"><div style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;margin-bottom:3px;" id="preview-title">Nom de la recette</div><div style="font-size:11px;color:var(--gris);line-height:1.5;" id="preview-desc">Description de la recette...</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 3 : INGRÉDIENTS -->
+        <div style="padding:20px 20px 0;">
+          <div class="form-section-title">🧄 Ingrédients</div>
+          <div id="ingredients-list">
+            <div class="ingredient-row" data-id="1"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><div style="width:24px;height:24px;background:var(--vert);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;" class="ing-num">1</div><input class="form-input ing-name" type="text" placeholder="Nom de l'ingrédient (ex: Riz)" style="flex:2;"><input class="form-input ing-qty" type="text" placeholder="Qté (ex: 500g)" style="flex:1;min-width:0;"><button onclick="removeIngredient(this)" style="width:28px;height:28px;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;font-size:14px;cursor:pointer;flex-shrink:0;">✕</button></div></div>
+            <div class="ingredient-row" data-id="2"><div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><div style="width:24px;height:24px;background:var(--vert);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;" class="ing-num">2</div><input class="form-input ing-name" type="text" placeholder="Nom de l'ingrédient" style="flex:2;"><input class="form-input ing-qty" type="text" placeholder="Qté" style="flex:1;min-width:0;"><button onclick="removeIngredient(this)" style="width:28px;height:28px;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;font-size:14px;cursor:pointer;flex-shrink:0;">✕</button></div></div>
+          </div>
+          <button onclick="addIngredient()" style="width:100%;background:var(--vert3);color:var(--vert);border:1.5px dashed var(--vert2);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;margin-bottom:8px;">➕ Ajouter un ingrédient</button>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+            <span class="quick-ing" onclick="addQuickIng('Tomates')">🍅 Tomates</span>
+            <span class="quick-ing" onclick="addQuickIng('Oignon')">🧅 Oignon</span>
+            <span class="quick-ing" onclick="addQuickIng('Ail')">🧄 Ail</span>
+            <span class="quick-ing" onclick="addQuickIng('Piment')">🌶️ Piment</span>
+            <span class="quick-ing" onclick="addQuickIng('Huile rouge')">🛢️ Huile rouge</span>
+            <span class="quick-ing" onclick="addQuickIng('Sel')">🧂 Sel</span>
+          </div>
+        </div>
+
+        <!-- SECTION 4 : ÉTAPES -->
+        <div style="padding:20px 20px 0;">
+          <div class="form-section-title">📋 Étapes de préparation</div>
+          <div id="etapes-list">
+            <div class="etape-form-row" data-id="1"><div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;"><div style="width:28px;height:28px;background:var(--vert);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;margin-top:4px;" class="etape-num">1</div><div style="flex:1;"><textarea class="form-input form-textarea" placeholder="Décrivez cette étape de préparation..." style="min-height:70px;"></textarea><div style="display:flex;align-items:center;gap:8px;margin-top:6px;"><span style="font-size:11px;color:var(--gris);">⏱ Durée :</span><input type="text" class="form-input etape-duree" placeholder="Ex: 15 min" style="width:100px;padding:6px 10px;"></div></div><button onclick="removeEtape(this)" style="width:28px;height:28px;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;font-size:14px;cursor:pointer;flex-shrink:0;margin-top:4px;">✕</button></div></div>
+          </div>
+          <button onclick="addEtape()" style="width:100%;background:var(--vert3);color:var(--vert);border:1.5px dashed var(--vert2);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;">➕ Ajouter une étape</button>
+        </div>
+
+        <!-- SECTION 5 : LISTE DE COURSES -->
+        <div style="padding:20px 20px 0;">
+          <div class="form-section-title">🛒 Liste de courses suggérée</div>
+          <div id="courses-list">
+            <div class="course-form-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><div style="width:22px;height:22px;background:var(--vert3);border:1.5px solid var(--vert2);border-radius:6px;flex-shrink:0;"></div><input class="form-input" type="text" placeholder="Article (ex: Riz blanc)" style="flex:2;"><input class="form-input" type="text" placeholder="Qté" style="flex:1;min-width:0;"><button onclick="removeCourse(this)" style="width:28px;height:28px;background:#fee2e2;color:#dc2626;border:none;border-radius:8px;font-size:14px;cursor:pointer;flex-shrink:0;">✕</button></div>
+          </div>
+          <button onclick="addCourse()" style="width:100%;background:#f0fdf4;color:var(--vert);border:1.5px dashed var(--vert2);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;">➕ Ajouter un article</button>
+        </div>
+
+        <!-- BOUTONS PUBLICATION -->
+        <div style="padding:24px 20px 10px;">
+          <div style="background:#f0fdf4;border-radius:16px;padding:14px 16px;margin-bottom:16px;border:1px solid #bbf7d0;">
+            <div style="font-size:12px;font-weight:700;color:var(--vert);margin-bottom:6px;">Résumé avant publication</div>
+            <div id="resume-summary" style="font-size:12px;color:#166534;line-height:1.8;">Remplissez le formulaire pour voir le résumé.</div>
+          </div>
+          <button onclick="publierRecette()" class="btn-primary" style="font-size:15px;padding:16px;margin-bottom:10px;" id="btn-publier">✅ Publier la recette</button>
+          <button onclick="sauvegarderBrouillon()" class="btn-secondary">💾 Sauvegarder comme brouillon</button>
+          <button onclick="showScreen('admin')" style="width:100%;background:transparent;border:none;color:var(--gris);font-size:13px;padding:12px;cursor:pointer;font-family:'Outfit',sans-serif;margin-top:4px;">Annuler</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ CONFIRMATION ══════════════ -->
+    <div class="screen" id="screen-confirmation">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px 30px;text-align:center;">
+        <div style="font-size:72px;margin-bottom:20px;animation:bounceIn 0.5s ease;">🎉</div>
+        <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:900;color:var(--texte);margin-bottom:10px;">Recette publiée !</div>
+        <div style="font-size:14px;color:var(--gris);line-height:1.6;margin-bottom:8px;">La recette <strong id="confirm-nom">"Nouvelle recette"</strong> a été ajoutée avec succès.</div>
+        <div style="background:var(--vert3);border-radius:12px;padding:12px 16px;margin-bottom:28px;width:100%;"><div style="font-size:12px;color:var(--vert);line-height:1.8;" id="confirm-details">—</div></div>
+        <button onclick="showScreen('admin')" class="btn-primary" style="width:100%;margin-bottom:10px;">← Retour au tableau de bord</button>
+        <button onclick="resetFormAndNew()" class="btn-secondary" style="width:100%;">➕ Ajouter une autre recette</button>
+      </div>
+    </div>
+
+    <!-- ══════════════ SUCCESS PREMIUM ══════════════ -->
+    <div class="screen" id="screen-success">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px 30px;text-align:center;">
+        <div style="font-size:72px;margin-bottom:20px;animation:bounceIn 0.5s ease;">👑</div>
+        <div style="font-family:'Playfair Display',serif;font-size:24px;font-weight:900;color:var(--vert);margin-bottom:10px;">Bienvenue Premium !</div>
+        <div style="font-size:14px;color:var(--gris);line-height:1.6;margin-bottom:24px;">Votre abonnement a été activé avec succès. Profitez de toutes les fonctionnalités sans limite.</div>
+        <button onclick="showScreen('accueil')" class="btn-primary" style="width:100%;">🍽️ Découvrir toutes les recettes</button>
+      </div>
+    </div>
+
+  </div><!-- /screens -->
+</div><!-- /phone -->
+
+<!-- Toast notification -->
+<div id="toast" class="toast" style="display:none;"></div>
+
+<!-- JS Principal -->
+<script src="app.js" defer></script>
+</body>
+</html>

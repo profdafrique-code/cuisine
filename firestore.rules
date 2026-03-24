@@ -1,0 +1,130 @@
+// ════════════════════════════════════════════════════════
+//  CUISINIÈRE 2.0 — Firestore Security Rules
+//  Copier-coller dans Firebase Console → Firestore → Rules
+//  Version : 1.0 — Mars 2026
+// ════════════════════════════════════════════════════════
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── FONCTIONS UTILITAIRES ─────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isPremium() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.premium == true;
+    }
+
+    function isAdmin() {
+      // Remplacez par l'UID Firebase de votre compte admin
+      // À récupérer dans Firebase Console → Authentication → Users
+      return isAuthenticated()
+        && request.auth.uid == "VOTRE_UID_ADMIN_ICI";
+    }
+
+    // ─── COLLECTION : users ────────────────────────────
+    match /users/{userId} {
+      // Lecture : uniquement le propriétaire du compte ou un admin
+      allow read: if isOwner(userId) || isAdmin();
+
+      // Création : uniquement à l'inscription (par l'utilisateur lui-même)
+      allow create: if isOwner(userId)
+        && request.resource.data.premium == false
+        && request.resource.data.questionsToday == 0
+        && request.resource.data.reputation == 0
+        && request.resource.data.niveau == 'Apprenti';
+
+      // Mise à jour : l'utilisateur peut modifier ses propres données
+      // mais ne peut PAS modifier les champs premium directement
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['premium', 'dateFinAbonnement'])
+        || isAdmin();
+
+      // Suppression : uniquement admin
+      allow delete: if isAdmin();
+    }
+
+    // ─── COLLECTION : recipes ──────────────────────────
+    match /recipes/{recipeId} {
+      // Lecture publique : toutes les recettes approuvées et gratuites
+      allow read: if resource.data.statut == 'approved'
+                     && resource.data.premium == false;
+
+      // Lecture premium : recettes premium accessibles aux abonnés
+      allow read: if resource.data.statut == 'approved'
+                     && resource.data.premium == true
+                     && isPremium();
+
+      // Lecture admin : toutes les recettes (approuvées, pending, rejected)
+      allow read: if isAdmin();
+
+      // Création :
+      // - Admin peut créer directement avec statut 'approved'
+      // - Utilisateurs authentifiés peuvent soumettre (statut 'pending' obligatoire)
+      allow create: if isAdmin()
+        || (isAuthenticated()
+            && request.resource.data.statut == 'pending'
+            && request.resource.data.auteurId == request.auth.uid);
+
+      // Mise à jour : uniquement admin
+      allow update: if isAdmin();
+
+      // Suppression : uniquement admin
+      allow delete: if isAdmin();
+    }
+
+    // ─── COLLECTION : comments ─────────────────────────
+    match /comments/{commentId} {
+      // Lecture publique : tous les commentaires sur les recettes approuvées
+      allow read: if true;
+
+      // Création : utilisateur authentifié uniquement, pour lui-même
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.note >= 1
+        && request.resource.data.note <= 5
+        && request.resource.data.text.size() >= 5
+        && request.resource.data.text.size() <= 500;
+
+      // Mise à jour : interdite (les commentaires sont immuables)
+      allow update: if false;
+
+      // Suppression : auteur ou admin
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+
+    // ─── COLLECTION : subscriptions ────────────────────
+    match /subscriptions/{subId} {
+      // Lecture : propriétaire ou admin uniquement
+      allow read: if isOwner(resource.data.userId) || isAdmin();
+
+      // Création : uniquement l'utilisateur authentifié (pré-création avant paiement)
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      // Mise à jour : uniquement admin (activation après paiement confirmé)
+      // NOTE : L'activation se fait via Firebase Functions (webhook paiement)
+      allow update: if isAdmin();
+
+      // Suppression : admin uniquement
+      allow delete: if isAdmin();
+    }
+
+    // ─── RÈGLE DE REFUS PAR DÉFAUT ─────────────────────
+    // Toute collection non listée ci-dessus est refusée
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
