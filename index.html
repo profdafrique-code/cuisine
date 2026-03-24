@@ -19,15 +19,15 @@
   // ═══════════════════════════════════════════════════
   //  🔥 CONFIGURATION FIREBASE — À REMPLACER PAR LES VÔTRES
   // ═══════════════════════════════════════════════════
-  const firebaseConfig = {
-    apiKey: "VOTRE_API_KEY",
-    authDomain: "VOTRE_PROJECT.firebaseapp.com",
-    projectId: "VOTRE_PROJECT_ID",
-    storageBucket: "VOTRE_PROJECT.appspot.com",
-    messagingSenderId: "VOTRE_SENDER_ID",
-    appId: "VOTRE_APP_ID"
-  };
-
+const firebaseConfig = {
+  apiKey: "AIzaSyDMA4SUqJYNNMAX51YbmHZtuGpNjp8jG-g",
+  authDomain: "cusine-20.firebaseapp.com",
+  projectId: "cusine-20",
+  storageBucket: "cusine-20.firebasestorage.app",
+  messagingSenderId: "1015301197403",
+  appId: "1:1015301197403:web:253393dc489c00ba78797e",
+  measurementId: "G-YS45HEED08"
+};
   const app = initializeApp(firebaseConfig);
   window.db      = getFirestore(app);
   window.auth    = getAuth(app);
